@@ -4,11 +4,11 @@ version '1.0'
 buildscript {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.3.0'
+        classpath 'com.android.tools.build:gradle:8.9.0'
     }
 }
 
@@ -26,24 +26,24 @@ android {
         namespace "com.gmail.antonmolchan00.gdpr_dialog"
     }
 
-    compileSdkVersion 30
+    compileSdkVersion 35
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
     defaultConfig {
-        minSdkVersion 16
+        minSdkVersion 21
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
-    
-    // lintOptions {
-    //     disable 'InvalidPackage'
-    // }
+
+    lint {
+        disable 'InvalidPackage'
+    }
 }
 
 dependencies {
-    implementation 'com.google.android.ump:user-messaging-platform:2.0.0'
+    implementation 'com.google.android.ump:user-messaging-platform:3.2.0'
 }
 

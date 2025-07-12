@@ -16,6 +16,6 @@ A new Flutter project.
   s.public_header_files = 'Classes/**/*.h'
   s.dependency 'Flutter'
   s.dependency 'Google-Mobile-Ads-SDK'
-  s.ios.deployment_target = '8.0'
+  s.ios.deployment_target = '13.0'
 end
 
