@@ -118,6 +118,10 @@ Fixed issue about non-responsable GDPR dialog
 - Updated lint configurations from deprecated `lintOptions` to `lint` (AGP 8.7+ compatible)
 - Modernized Java/Kotlin compatibility settings across all modules
 - Added proper namespace support for Android Gradle Plugin 8.7+
+- **Fixed deprecated `const MethodChannel()` constructor in Dart code**
+- **Fixed iOS force unwrapping and deprecated window access patterns**
+- **Fixed iOS plugin registration recursive call issue**
+- **Modernized iOS window scene handling for iOS 13+ compatibility**
 
 ### 🍎 iOS Updates:
 

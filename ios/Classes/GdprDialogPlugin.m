@@ -1,7 +1,8 @@
 #import "GdprDialogPlugin.h"
+#import "SwiftGdprDialogPlugin.h"
 
 @implementation GdprDialogPlugin
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
-    [GdprDialogPlugin registerWithRegistrar:registrar];
+    [SwiftGdprDialogPlugin registerWithRegistrar:registrar];
 }
 @end

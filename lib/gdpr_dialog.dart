@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 /// Class for work with native GDPR Consent Form
 /// and for work with Consent Statuses
 class GdprDialog {
-  static const MethodChannel _channel = const MethodChannel('gdpr_dialog');
+  static const MethodChannel _channel = MethodChannel('gdpr_dialog');
 
   // Create singleton class
   GdprDialog._();
@@ -31,11 +31,12 @@ class GdprDialog {
     String testDeviceId = '',
   }) async {
     try {
-      final bool result = await _channel.invokeMethod('gdpr.activate', <String, dynamic>{
-            'isForTest': isForTest,
-            'testDeviceId': testDeviceId,
-          }) ??
-          false;
+      final bool result =
+          await _channel.invokeMethod('gdpr.activate', <String, dynamic>{
+                'isForTest': isForTest,
+                'testDeviceId': testDeviceId,
+              }) ??
+              false;
       debugPrint('Result on showing of GDPR Form --- $result');
       return result || await getConsentStatus() == ConsentStatus.notRequired;
     } on Exception catch (e) {
@@ -58,7 +59,8 @@ class GdprDialog {
   /// `UNKNOWN` status means, that there is no information about user location.
   Future<ConsentStatus> getConsentStatus() async {
     try {
-      final String result = await _channel.invokeMethod('gdpr.getConsentStatus', []) ?? '';
+      final String result =
+          await _channel.invokeMethod('gdpr.getConsentStatus', []) ?? '';
       debugPrint('Got a GDPR status: $result');
 
       switch (result) {

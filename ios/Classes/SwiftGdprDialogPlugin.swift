@@ -15,11 +15,14 @@ public class SwiftGdprDialogPlugin: NSObject, FlutterPlugin {
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch (call.method) {
       case "gdpr.activate":
-        let arg = call.arguments as? NSDictionary
-        let isTest = arg!["isForTest"] as? Bool;
-        let deviceId = arg!["testDeviceId"] as? String;
+        guard let arg = call.arguments as? NSDictionary,
+              let isTest = arg["isForTest"] as? Bool,
+              let deviceId = arg["testDeviceId"] as? String else {
+          result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+          return
+        }
         
-        self.checkConsent(result: result, isForTest: isTest!, testDeviceId: deviceId!)
+        self.checkConsent(result: result, isForTest: isTest, testDeviceId: deviceId)
 
       case "gdpr.getConsentStatus":
         self.getConsentStatus(result: result);
@@ -110,8 +113,15 @@ public class SwiftGdprDialogPlugin: NSObject, FlutterPlugin {
           // Present the form. You can also hold on to the reference to present
           // later.
           if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.required {
+            guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let window = windowScene.windows.first,
+                  let rootViewController = window.rootViewController else {
+              result(false)
+              return
+            }
+            
             form?.present(
-              from: (UIApplication.shared.delegate?.window?!.rootViewController)!,
+              from: rootViewController,
                 completionHandler: { dismissError in
                   if dismissError != nil {
                     print("Error on loadForm completionHandler: \(dismissError)")

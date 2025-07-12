@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:gdpr_dialog/gdpr_dialog.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(const MyApp());
 
 class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
   @override
-  _MyAppState createState() => _MyAppState();
+  MyAppState createState() => MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class MyAppState extends State<MyApp> {
   String status = 'none';
 
   @override
@@ -25,16 +27,18 @@ class _MyAppState extends State<MyApp> {
                 child: Text('Show dialog'),
                 onPressed: () {
                   GdprDialog.instance.resetDecision();
-                  GdprDialog.instance.showDialog(isForTest: false, testDeviceId: '').then((onValue) {
+                  GdprDialog.instance
+                      .showDialog(isForTest: false, testDeviceId: '')
+                      .then((onValue) {
                     setState(() => status = 'dialog result == $onValue');
                   });
                 },
               ),
               ElevatedButton(
                 child: Text('Get consent status'),
-                onPressed: () => GdprDialog.instance
-                    .getConsentStatus()
-                    .then((value) => setState(() => status = 'consent status == $value')),
+                onPressed: () => GdprDialog.instance.getConsentStatus().then(
+                    (value) =>
+                        setState(() => status = 'consent status == $value')),
               ),
               Container(height: 50),
               Text(status),
