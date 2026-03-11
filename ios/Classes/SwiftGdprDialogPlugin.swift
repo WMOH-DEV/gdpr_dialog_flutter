@@ -1,11 +1,9 @@
 import Flutter
 import UIKit
-import UserMessagingPlatform // UMP SDK made for Google Mobile Ads
+import UserMessagingPlatform
 
-// Class for work with GDPR Consent Form
-// and for work with Consent Statuses
 public class SwiftGdprDialogPlugin: NSObject, FlutterPlugin {
-        
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "gdpr_dialog", binaryMessenger: registrar.messenger())
     let instance = SwiftGdprDialogPlugin()
@@ -13,142 +11,120 @@ public class SwiftGdprDialogPlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    switch (call.method) {
-      case "gdpr.activate":
-        guard let arg = call.arguments as? NSDictionary,
-              let isTest = arg["isForTest"] as? Bool,
-              let deviceId = arg["testDeviceId"] as? String else {
-          result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
-          return
-        }
-        
-        self.checkConsent(result: result, isForTest: isTest, testDeviceId: deviceId)
-
-      case "gdpr.getConsentStatus":
-        self.getConsentStatus(result: result);
-      case "gdpr.reset":
-        self.resetDecision(result: result);
-      default:
-        result(FlutterMethodNotImplemented)
-    }
-  }
-  
-  // Possible returned values:
-  //
-  // `OBTAINED` status means, that user already chose one of the variants
-  // ('Consent' or 'Do not consent');
-  //
-  // `REQUIRED` status means, that form should be shown by user, because his
-  // location is at EEA or UK;
-  //
-  // `NOT_REQUIRED` status means, that form would not be shown by user, because
-  // his location is not at EEA or UK;
-  //
-  // `UNKNOWN` status means, that there is no information about user location.
-  private func getConsentStatus(result: @escaping FlutterResult) {
-    var statusResult = "ERROR"
-    do {
-      let status = UMPConsentInformation.sharedInstance.consentStatus
-      if status == .notRequired {
-        print(".notRequired");
-        statusResult = "NOT_REQUIRED"
-      } else if status == .required {
-        print(".required");
-        statusResult = "REQUIRED"
-      } else if status == .obtained {
-        print(".obtained");
-        statusResult = "OBTAINED"
-      } else if status == .unknown {
-        print(".unknown");
-        statusResult = "UNKNOWN"
+    switch call.method {
+    case "gdpr.activate":
+      guard let arg = call.arguments as? NSDictionary,
+            let isTest = arg["isForTest"] as? Bool,
+            let deviceId = arg["testDeviceId"] as? String else {
+        result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
+        return
       }
-    } catch let error {
-      print("Error on getConsentStatus: \(error)")
+      checkConsent(result: result, isForTest: isTest, testDeviceId: deviceId)
+
+    case "gdpr.getConsentStatus":
+      getConsentStatus(result: result)
+
+    case "gdpr.canRequestAds":
+      result(ConsentInformation.shared.canRequestAds)
+
+    case "gdpr.isPrivacyOptionsRequired":
+      let status = ConsentInformation.shared.privacyOptionsRequirementStatus
+      result(status == .required)
+
+    case "gdpr.showPrivacyOptionsForm":
+      showPrivacyOptionsForm(result: result)
+
+    case "gdpr.reset":
+      resetDecision(result: result)
+
+    default:
+      result(FlutterMethodNotImplemented)
     }
-    result(statusResult)
   }
+
+  // MARK: - Consent Status
+
+  private func getConsentStatus(result: @escaping FlutterResult) {
+    let status = ConsentInformation.shared.consentStatus
+    let statusString: String
+    switch status {
+    case .notRequired:
+      statusString = "NOT_REQUIRED"
+    case .required:
+      statusString = "REQUIRED"
+    case .obtained:
+      statusString = "OBTAINED"
+    case .unknown:
+      statusString = "UNKNOWN"
+    @unknown default:
+      statusString = "UNKNOWN"
+    }
+    result(statusString)
+  }
+
+  // MARK: - Consent Flow (UMP SDK 3.x)
 
   private func checkConsent(result: @escaping FlutterResult, isForTest: Bool, testDeviceId: String) {
-    let parameters = UMPRequestParameters()
-    // Set tag for under age of consent. Here false means users are not under age.
-    parameters.tagForUnderAgeOfConsent = false
+    let parameters = RequestParameters()
+    parameters.isTaggedForUnderAgeOfConsent = false
 
     if isForTest {
-      let debugSettings = UMPDebugSettings()
-      debugSettings.testDeviceIdentifiers = [ testDeviceId ]
-      debugSettings.geography = UMPDebugGeography.EEA
+      let debugSettings = DebugSettings()
+      debugSettings.testDeviceIdentifiers = [testDeviceId]
+      debugSettings.geography = .EEA
       parameters.debugSettings = debugSettings
     }
 
-    // Request an update to the consent information.
-    UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(
-        with: parameters,
-        completionHandler: { [self] error in
+    // Step 1: Request consent info update
+    ConsentInformation.shared.requestConsentInfoUpdate(with: parameters) { [self] error in
+      if let error = error {
+        print("Error on requestConsentInfoUpdate: \(error.localizedDescription)")
+        result(false)
+        return
+      }
 
-          // The consent information has updated.
-          if error != nil {
-            print("Error on requestConsentInfoUpdate: \(error)")
-            result(false)
-          } else {
-            // The consent information state was updated.
-            // You are now ready to see if a form is available.
-            let formStatus = UMPConsentInformation.sharedInstance.formStatus
-            if formStatus == UMPFormStatus.available {
-              loadForm(result: result)
-            } else if formStatus == UMPFormStatus.unavailable {
-              // Consent forms are unavailable. Showing a consent form is not required.
-              result(true)
-            }
-          }
-        })
-  }
+      // Step 2: Load and present consent form if required (UMP 3.x approach)
+      guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+            let rootViewController = windowScene.keyWindow?.rootViewController else {
+        // No view controller available — consent info updated but can't show form
+        result(true)
+        return
+      }
 
-  private func loadForm(result: @escaping FlutterResult) {
-    UMPConsentForm.load(
-      completionHandler: { form, loadError in
-        if loadError != nil {
-          print("Error on loadForm: \(loadError)")
+      ConsentForm.loadAndPresentIfRequired(from: rootViewController) { formError in
+        if let formError = formError {
+          print("Error on loadAndPresentIfRequired: \(formError.localizedDescription)")
           result(false)
-        } else {
-          // Present the form. You can also hold on to the reference to present
-          // later.
-          if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.required {
-            guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                  let window = windowScene.windows.first,
-                  let rootViewController = window.rootViewController else {
-              result(false)
-              return
-            }
-            
-            form?.present(
-              from: rootViewController,
-                completionHandler: { dismissError in
-                  if dismissError != nil {
-                    print("Error on loadForm completionHandler: \(dismissError)")
-                    result(false)
-                  }
-                  // else {
-                  //   if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.obtained {
-                  //     --- App can start requesting ads. ---
-                  //   }
-                  // }
-                })
-          }
-          result(true)
+          return
         }
-      })
+        // Form was shown and dismissed (or wasn't required)
+        result(true)
+      }
+    }
   }
 
-  // In testing your app with the UMP SDK, you may find it helpful
-  // to reset the state of the SDK so that you can simulate
-  // a user's first install experience.
-  private func resetDecision(result: @escaping FlutterResult) {
-    do {
-      UMPConsentInformation.sharedInstance.reset()
-      result(true)
-    } catch let error {
-      print("Error on resetDecision: \(error)")
-      result(false)
+  // MARK: - Privacy Options Form
+
+  private func showPrivacyOptionsForm(result: @escaping FlutterResult) {
+    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+          let rootViewController = windowScene.keyWindow?.rootViewController else {
+      result(FlutterError(code: "NO_VIEW_CONTROLLER", message: "No root view controller available", details: nil))
+      return
     }
+
+    ConsentForm.presentPrivacyOptionsForm(from: rootViewController) { error in
+      if let error = error {
+        result(FlutterError(code: "FORM_ERROR", message: error.localizedDescription, details: nil))
+        return
+      }
+      result(true)
+    }
+  }
+
+  // MARK: - Reset
+
+  private func resetDecision(result: @escaping FlutterResult) {
+    ConsentInformation.shared.reset()
+    result(true)
   }
 }

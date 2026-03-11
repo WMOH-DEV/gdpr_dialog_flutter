@@ -1,31 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Class for work with native GDPR Consent Form
-/// and for work with Consent Statuses
+/// Plugin for managing GDPR consent using Google's UMP SDK 3.x.
+///
+/// Handles consent information updates, form presentation, and provides
+/// methods to check if ads can be requested based on user consent.
 class GdprDialog {
   static const MethodChannel _channel = MethodChannel('gdpr_dialog');
 
-  // Create singleton class
+  // Singleton
   GdprDialog._();
   static final GdprDialog instance = GdprDialog._();
 
-  /// Requests showing of a native Consent Form for user.
-  /// Form consists of Consent Message and buttons:
-  /// [Consent], [Do not consent]
+  /// Requests a consent information update and shows the consent form if
+  /// required (UMP SDK 3.x `loadAndPresentIfRequired` flow).
   ///
-  /// If [isForTest] equals `true`
-  /// then you need to specify [testDeviceId].
-  /// You can find it in logs.
+  /// If [isForTest] is `true`, you must provide a [testDeviceId] (found in
+  /// logcat / Xcode console) to simulate EEA geography.
   ///
-  /// Function returns `true` if
-  /// Consent Form loaded (but not required to be shown)
-  /// ConsentStatuses for `true`:
-  /// `REQUIRED`, `OBTAINED` or `NOT_REQUIRED`.
-  ///
-  /// Returns `false` because of
-  /// error during loading of Consent Form.
-  /// Error will occurs if in test mode you are not specified [testDeviceId]
+  /// Returns `true` when the consent flow completes successfully (form shown
+  /// and dismissed, or form not required). Returns `false` on error.
   Future<bool> showDialog({
     bool isForTest = false,
     String testDeviceId = '',
@@ -33,35 +27,29 @@ class GdprDialog {
     try {
       final bool result =
           await _channel.invokeMethod('gdpr.activate', <String, dynamic>{
-                'isForTest': isForTest,
-                'testDeviceId': testDeviceId,
-              }) ??
-              false;
-      debugPrint('Result on showing of GDPR Form --- $result');
-      return result || await getConsentStatus() == ConsentStatus.notRequired;
+            'isForTest': isForTest,
+            'testDeviceId': testDeviceId,
+          }) ??
+          false;
+      debugPrint('GdprDialog: showDialog result = $result');
+      return result;
     } on Exception catch (e) {
-      debugPrint('$e');
+      debugPrint('GdprDialog: showDialog error: $e');
       return false;
     }
   }
 
-  /// Possible returned values:
+  /// Returns the current [ConsentStatus].
   ///
-  /// `OBTAINED` status means, that user already chose one of the variants ('Consent'
-  /// or 'Do not consent');
-  ///
-  /// `REQUIRED` status means, that form should be shown by user, because his
-  /// location is at EEA or UK;
-  ///
-  /// `NOT_REQUIRED` status means, that form would not be shown by user, because his
-  /// location is not at EEA or UK;
-  ///
-  /// `UNKNOWN` status means, that there is no information about user location.
+  /// - [ConsentStatus.obtained] — user made a consent choice
+  /// - [ConsentStatus.required] — form must be shown (EEA/UK user)
+  /// - [ConsentStatus.notRequired] — outside EEA/UK, no form needed
+  /// - [ConsentStatus.unknown] — status not yet determined
   Future<ConsentStatus> getConsentStatus() async {
     try {
       final String result =
           await _channel.invokeMethod('gdpr.getConsentStatus', []) ?? '';
-      debugPrint('Got a GDPR status: $result');
+      debugPrint('GdprDialog: consent status = $result');
 
       switch (result) {
         case 'REQUIRED':
@@ -75,38 +63,84 @@ class GdprDialog {
           return ConsentStatus.unknown;
       }
     } on Exception catch (e) {
-      debugPrint('$e');
+      debugPrint('GdprDialog: getConsentStatus error: $e');
       return ConsentStatus.unknown;
     }
   }
 
-  /// In testing your app with the UMP SDK, you may find it helpful
-  /// to reset the state of the SDK so that you can simulate
-  /// a user's first install experience.
+  /// Returns `true` if the app can request ads based on the current consent
+  /// state. This maps directly to UMP SDK's `canRequestAds` property.
+  ///
+  /// Use this instead of manually checking [ConsentStatus] to determine
+  /// whether to initialize ad SDKs — it's the Google-recommended approach.
+  Future<bool> canRequestAds() async {
+    try {
+      final bool result =
+          await _channel.invokeMethod('gdpr.canRequestAds') ?? false;
+      debugPrint('GdprDialog: canRequestAds = $result');
+      return result;
+    } on Exception catch (e) {
+      debugPrint('GdprDialog: canRequestAds error: $e');
+      return false;
+    }
+  }
+
+  /// Returns `true` if a privacy options entry point should be shown to the
+  /// user (e.g. a "Privacy Settings" button in your app's settings page).
+  ///
+  /// When this returns `true`, call [showPrivacyOptionsForm] when the user
+  /// taps the privacy settings button.
+  Future<bool> isPrivacyOptionsRequired() async {
+    try {
+      final bool result =
+          await _channel.invokeMethod('gdpr.isPrivacyOptionsRequired') ?? false;
+      debugPrint('GdprDialog: isPrivacyOptionsRequired = $result');
+      return result;
+    } on Exception catch (e) {
+      debugPrint('GdprDialog: isPrivacyOptionsRequired error: $e');
+      return false;
+    }
+  }
+
+  /// Presents the privacy options form so the user can update their consent
+  /// choices. Only call this when [isPrivacyOptionsRequired] returns `true`.
+  ///
+  /// Returns `true` on success, throws on error.
+  Future<bool> showPrivacyOptionsForm() async {
+    try {
+      final bool result =
+          await _channel.invokeMethod('gdpr.showPrivacyOptionsForm') ?? false;
+      debugPrint('GdprDialog: showPrivacyOptionsForm result = $result');
+      return result;
+    } on PlatformException catch (e) {
+      debugPrint('GdprDialog: showPrivacyOptionsForm error: $e');
+      rethrow;
+    }
+  }
+
+  /// Resets the consent state. Useful for testing to simulate a user's first
+  /// install experience.
   Future<void> resetDecision() async {
     try {
       await _channel.invokeMethod('gdpr.reset');
-      debugPrint('Successfully dropped GDPR decision');
+      debugPrint('GdprDialog: consent decision reset');
     } on Exception catch (e) {
-      debugPrint('$e');
+      debugPrint('GdprDialog: resetDecision error: $e');
     }
   }
 }
 
-/// Consent Statuses explaining situation about Consent Form
+/// Consent status values from Google's UMP SDK.
 enum ConsentStatus {
-  /// `notRequired` status means, that form would not be shown by user, because his
-  /// location is not at EEA or UK;
+  /// Form not required — user is outside EEA/UK.
   notRequired,
 
-  /// `required` status means, that form should be shown by user, because his
-  /// location is at EEA or UK;
+  /// Consent form must be shown — user is in EEA/UK.
   required,
 
-  /// `obtained` status means, that user already chose one of the variants ('Consent'
-  /// or 'Do not consent');
+  /// User has made a consent choice (consent or decline).
   obtained,
 
-  /// `unknown` status means, that there is no information about user location.
+  /// Status not yet determined (before `requestConsentInfoUpdate`).
   unknown,
 }
